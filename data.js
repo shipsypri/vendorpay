@@ -27,15 +27,12 @@ window.TRIP_CHARGES = {
       { name: 'Freight Charges', subtotal: 5000, items: [
         { id: 'C1', name: 'Distance Based Cost', entity: 'DD25660103-LAMB', entityType: 'Trip', amount: 4700, remark: 'System generated', aiPill: '$10/km (from rates) \u00d7 470km (from distance master)', aiBucket: 'approve', chargeType: 'distance', reviewed: true },
         { id: 'C2', name: 'Unloading Charge', entity: 'CN-198004', entityType: 'Consignment', amount: 200, remark: 'At Kooragang Coal Terminal', aiPill: '$200 acknowledged on POD (Extracted)', aiBucket: 'approve', chargeType: 'unloading', reviewed: true },
-        { id: 'C3', name: 'Detention Charge', entity: 'CN-198005', entityType: 'Consignment', amount: 100, remark: 'NA', aiPill: 'In time: 16 Feb 1:33pm; Out time: 16 Feb 2:45pm (from GPS)', aiBucket: 'review', chargeType: 'detention', reviewed: false },
+        { id: 'C3', name: 'Detention Charge', entity: 'CN-198005', entityType: 'Consignment', amount: 100, remark: 'NA', aiPill: 'In time: 16 Feb 1:33pm; Out time: 16 Feb 2:45pm (from GPS)', aiBucket: 'approve', chargeType: 'detention', reviewed: true },
       ]},
       { name: 'Ad-Hoc Charges', subtotal: 200, items: [
         { id: 'C4', name: 'Tarp & Strap', entity: 'DD25660103-LAMB', entityType: 'Trip', amount: 200, remark: 'Driver claim', aiPill: 'Acknowledged on driver upload', aiBucket: 'approve', chargeType: 'distance', reviewed: true },
       ]},
-      { name: 'Penalties', subtotal: -200, items: [
-        { id: 'P1', name: 'Damage', isAi: true, entity: 'DD25660103-LAMB', entityType: 'Trip', amount: -100, remark: 'Recommended by Shipsy AI', aiPill: '8 cases damaged (from POD)', aiBucket: 'penalty', chargeType: 'unloading', reviewed: false },
-        { id: 'P2', name: 'Delay', entity: 'CN-198005', entityType: 'Consignment', amount: -100, remark: 'Added by FinOps User1', aiPill: 'SLA exceeded by 2 hrs (from GPS)', aiBucket: 'penalty', chargeType: 'detention', reviewed: true },
-      ]},
+      { name: 'Penalties', subtotal: 0, items: [] },
     ],
     total: 5000,
   },
@@ -103,8 +100,8 @@ window.DISTANCE = {
   baseRate: 10,
   distance: 470,
   inTime: '15 Feb 2026 6:00pm',
-  formula: 'Distance Based Cost = Base Rate + (Distance \u00d7 Rate per km)',
-  calc: 'Distance Based Cost = $0 + (470 km \u00d7 $10/km)',
+  formula: 'Distance Based Cost = Distance \u00d7 Rate per km',
+  calc: 'Distance Based Cost = 470 km \u00d7 $10/km',
 };
 
 // Quick action cards (used by HomeScreen if it exists)

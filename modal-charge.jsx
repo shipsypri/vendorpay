@@ -68,9 +68,10 @@ function ChargeModal({ open, onClose, charge, trip }) {
                 <tbody>
                   {ct === 'distance' && (
                     <>
-                      <tr><td>Base Rate</td><td style={{fontWeight:600}}>${cfg.baseRate.toFixed(2)}</td><td className="right"><span className="src-pill">from Rate Masters</span></td></tr>
+                      <tr><td>Rate per km</td><td style={{fontWeight:600}}>${cfg.baseRate.toFixed(2)}</td><td className="right"><span className="src-pill">from Rate Masters</span></td></tr>
                       <tr><td>Distance</td><td style={{fontWeight:600}}>{cfg.distance} km</td><td className="right"><span className="src-pill">from Distance Master</span></td></tr>
-                      <tr><td>In Time</td><td style={{fontWeight:600}}>{cfg.inTime}</td><td className="right"><span className="src-pill">from POD {Icon.pin(10)}</span></td></tr>
+                      <tr><td>Pickup Odometer</td><td style={{fontWeight:600}}>124,820 km</td><td className="right"><span className="src-pill">from POD {Icon.pin(10)}</span></td></tr>
+                      <tr><td>Delivery Odometer</td><td style={{fontWeight:600}}>125,290 km</td><td className="right"><span className="src-pill">from POD {Icon.pin(10)}</span></td></tr>
                     </>
                   )}
                   {ct === 'unloading' && (
@@ -104,54 +105,20 @@ function ChargeModal({ open, onClose, charge, trip }) {
   );
 }
 
-// Australian Coates Hire delivery docket — clean printed style
+// Australian Coates Hire delivery docket — actual photographed POD image
 function PodAttachment({ chargeType, trip }) {
   const isUnload = chargeType === 'unloading';
-  const isDist = chargeType === 'distance';
+  const src = isUnload ? 'pod-unloading-final.png' : 'pod-distance-final.png';
   return (
-    <div style={{width:'100%', height:'100%', overflow:'auto', background:'#E8EBF0', display:'flex', justifyContent:'center', padding:16, boxSizing:'border-box'}}>
-      <div style={{width:'100%', maxWidth:360, background:'#fff', boxShadow:'0 2px 12px rgba(0,0,0,0.12)', padding:'18px 22px', fontFamily:'-apple-system, BlinkMacSystemFont, sans-serif', color:'#1F2533'}}>
-        <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', borderBottom:'2px solid #1F2533', paddingBottom:8, marginBottom:12}}>
-          <div>
-            <div style={{fontSize:13, fontWeight:800, letterSpacing:0.5, color:'#E5484D'}}>COATES HIRE</div>
-            <div style={{fontSize:7, color:'#6B7388', marginTop:1}}>Operations Pty Ltd · ABN 99 064 263 567</div>
-          </div>
-          <div style={{textAlign:'right'}}>
-            <div style={{fontSize:9, fontWeight:700}}>DELIVERY DOCKET</div>
-            <div style={{fontSize:7, color:'#6B7388'}}>POD #AU-{String(trip).replace('DD25','').slice(0,8)}</div>
-          </div>
-        </div>
-        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:6, fontSize:7, marginBottom:10}}>
-          <div><div style={{fontWeight:700, fontSize:7.5}}>From</div><div>Coates Hire — Lambton Depot</div><div style={{color:'#6B7388'}}>14 Anderson Dr, Lambton NSW 2299</div></div>
-          <div><div style={{fontWeight:700, fontSize:7.5}}>To</div><div>{isUnload ? 'Kooragang Coal Terminal' : isDist ? 'Kooragang Industrial Estate' : 'Carrington Coal Terminal'}</div><div style={{color:'#6B7388'}}>{isUnload ? 'Cormorant Rd, Kooragang NSW 2304' : isDist ? 'Greenleaf Rd, Kooragang NSW 2304' : 'Bourke St, Carrington NSW 2294'}</div></div>
-          <div><div style={{fontWeight:700, fontSize:7.5}}>Trip Number</div><div>{trip}</div></div>
-          <div><div style={{fontWeight:700, fontSize:7.5}}>Carrier</div><div>Dickies Transport Pty Ltd</div></div>
-          <div><div style={{fontWeight:700, fontSize:7.5}}>Distance</div><div>{isDist ? '500 km' : '— km'}</div></div>
-          <div><div style={{fontWeight:700, fontSize:7.5}}>Driver</div><div>S. Mitchell</div></div>
-        </div>
-        <div style={{fontSize:7.5, fontWeight:700, marginTop:6, marginBottom:4}}>Goods Delivered</div>
-        <table style={{width:'100%', fontSize:7, borderCollapse:'collapse'}}>
-          <thead><tr style={{background:'#F5F6F8', borderBottom:'1px solid #C7CDDB'}}><th style={{textAlign:'left', padding:'3px 4px'}}>Item</th><th style={{textAlign:'right', padding:'3px 4px', width:30}}>Qty</th><th style={{padding:'3px 4px', width:60}}>Asset #</th></tr></thead>
-          <tbody>
-            <tr style={{borderBottom:'1px solid #EEF0F4'}}><td style={{padding:'3px 4px'}}>Scissor Lift 33ft Diesel</td><td style={{textAlign:'right', padding:'3px 4px'}}>1</td><td style={{padding:'3px 4px', color:'#6B7388'}}>AU-SL-3421</td></tr>
-            {isUnload && <tr style={{borderBottom:'1px solid #EEF0F4'}}><td style={{padding:'3px 4px'}}>Telehandler 3t (9m) Stage 5</td><td style={{textAlign:'right', padding:'3px 4px'}}>1</td><td style={{padding:'3px 4px', color:'#6B7388'}}>AU-TH-7790</td></tr>}
-          </tbody>
-        </table>
-        {isUnload && <div style={{marginTop:10, padding:'7px 8px', background:'#FFF8EB', border:'1px solid #F5C97B', borderRadius:4, fontSize:7}}><div style={{fontWeight:700, color:'#8A5A00', marginBottom:2}}>⚠ Manual Unloading Required</div><div style={{color:'#5A3A0A'}}>Site forklift unavailable. Driver manually unloaded <b>6 pallets</b>.</div></div>}
-        {isDist && <div style={{marginTop:10, padding:'7px 8px', background:'#F0F8F0', border:'1px solid #6FD5A6', borderRadius:4, fontSize:7}}><div style={{fontWeight:700, color:'#1B7F4A', marginBottom:2}}>✓ Distance Confirmed via Odometer</div><div style={{color:'#0B3D2A'}}>Start: 124,820 km · End: 125,320 km · Total: <b>500 km</b></div></div>}
-        <div style={{marginTop:12, paddingTop:8, borderTop:'1px dashed #C7CDDB'}}>
-          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, fontSize:7}}>
-            <div><div style={{fontWeight:700, fontSize:7.5}}>Received by</div><div>M. Patterson</div><div style={{color:'#6B7388'}}>Site Supervisor</div></div>
-            <div><div style={{fontWeight:700, fontSize:7.5}}>Time</div><div>16 Feb 2026, 11:42am</div></div>
-          </div>
-          <div style={{marginTop:8, height:32, borderBottom:'1px solid #1F2533', display:'flex', alignItems:'flex-end', paddingBottom:2}}>
-            <svg width="80" height="20" viewBox="0 0 80 20"><path d="M 4 14 Q 12 4, 18 12 T 34 10 Q 42 18, 50 8 T 68 12" stroke="#1F2533" strokeWidth="1.4" fill="none"/></svg>
-          </div>
-          <div style={{fontSize:6, color:'#6B7388', marginTop:1}}>Signature</div>
-        </div>
-        <div style={{marginTop:10, display:'flex', justifyContent:'flex-end'}}>
-          <div style={{transform:'rotate(-6deg)', border:'2px solid #2EA458', color:'#2EA458', padding:'3px 8px', fontSize:8, fontWeight:800, letterSpacing:1, borderRadius:2}}>DELIVERED</div>
-        </div>
+    <div style={{width:'100%', height:'100%', overflow:'auto', background:'#2a2620', display:'flex', justifyContent:'center', alignItems:'flex-start', padding:24, boxSizing:'border-box'}}>
+      <div style={{
+        position:'relative',
+        width:'100%', maxWidth:380,
+        boxShadow:'0 18px 40px rgba(0,0,0,0.55), 0 4px 12px rgba(0,0,0,0.35)',
+        transform:'rotate(-0.8deg)',
+        marginTop:8,
+      }}>
+        <img src={src} alt="Delivery Docket" style={{width:'100%', display:'block'}} />
       </div>
     </div>
   );
