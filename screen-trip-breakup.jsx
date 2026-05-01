@@ -1,5 +1,5 @@
 // Trip Charge Breakup screen — opened when a trip row is clicked
-function TripBreakupScreen({ trip, onBack, onSelectCharge }) {
+function TripBreakupScreen({ trip, onBack, onSelectCharge, onApprove, onReject }) {
   const [tab, setTab] = React.useState('breakup');
   if (!trip) return null;
   const data = getTripCharges(trip);
@@ -16,8 +16,8 @@ function TripBreakupScreen({ trip, onBack, onSelectCharge }) {
           </span>
         </div>
         <div className="right">
-          <button className="btn btn-reject">{Icon.x(13)} Reject</button>
-          <button className="btn btn-approve" style={{background:'#2EA458', color:'#fff', borderColor:'#2EA458'}}>{Icon.check(13)} Approve</button>
+          <button className="btn btn-reject" onClick={onReject}>{Icon.x(13)} Reject</button>
+          <button className="btn btn-approve" style={{background:'#2EA458', color:'#fff', borderColor:'#2EA458'}} onClick={onApprove}>{Icon.check(13)} Approve</button>
         </div>
       </div>
 

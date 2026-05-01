@@ -12,12 +12,85 @@ function ChargeModal({ open, onClose, charge, trip }) {
     setSubTab(isTelemetry ? 'map' : 'attach');
   }, [ct, isTelemetry]);
 
-  const cfg = ct === 'distance' ? DISTANCE : ct === 'unloading' ? UNLOADING : DETENTION;
-  const titleMap = { distance: 'Distance Based Cost', unloading: 'Unloading Charge', detention: 'Detention Charge' };
+  // Build a per-charge cfg from the actual clicked charge so amount/distance/etc. reflect THIS trip
+  const baseCfg = ct === 'distance' ? DISTANCE : ct === 'unloading' ? UNLOADING : ct === 'toll' ? TOLL : DETENTION;
+  const chargeAmount = Math.abs(charge.amount || baseCfg.amount);
+  const cfg = (() => {
+    if (ct === 'distance') {
+      const rate = baseCfg.baseRate || 10;
+      const distance = +(chargeAmount / rate).toFixed(1);
+      return {
+        ...baseCfg,
+        amount: chargeAmount,
+        distance,
+        remark: charge.remark || baseCfg.remark,
+        calc: 'Distance Based Cost = ' + distance + ' km \u00d7 $' + rate.toFixed(2) + '/km',
+      };
+    }
+    if (ct === 'unloading') {
+      const rate = baseCfg.rate || 32;
+      const pallets = Math.max(1, Math.round(chargeAmount / rate));
+      return {
+        ...baseCfg,
+        amount: chargeAmount,
+        pallets,
+        remark: charge.remark || baseCfg.remark,
+        calc: 'Unloading Charge = ' + pallets + ' pallets \u00d7 $' + rate.toFixed(2) + '/pallet',
+      };
+    }
+    if (ct === 'detention') {
+      // Derive in/out times + hours from the charge's own remark/aiPill if present
+      // If AI is rejecting because stay was short, show the actual stay time instead of the static 12 hr
+      const pill = (charge.aiPill || '').toLowerCase();
+      let stayMins = null;
+      const m = pill.match(/(\d+)\s*min/);
+      if (m) stayMins = parseInt(m[1], 10);
+      const hrMatch = pill.match(/(\d+)\s*hr/);
+      if (hrMatch && !stayMins) stayMins = parseInt(hrMatch[1], 10) * 60;
+
+      if (stayMins !== null) {
+        const inT = '16 Feb 2026 1:33pm';
+        const outDate = new Date('2026-02-16T13:33:00');
+        outDate.setMinutes(outDate.getMinutes() + stayMins);
+        const hh = outDate.getHours();
+        const mm = String(outDate.getMinutes()).padStart(2,'0');
+        const ampm = hh >= 12 ? 'pm' : 'am';
+        const h12 = ((hh + 11) % 12) + 1;
+        const outT = '16 Feb 2026 ' + h12 + ':' + mm + ampm;
+        const hrs = (stayMins / 60).toFixed(2);
+        const rate = baseCfg.rate || 8.32;
+        const isShort = stayMins < 60;
+        return {
+          ...baseCfg,
+          amount: chargeAmount,
+          remark: charge.remark || baseCfg.remark,
+          inTime: inT,
+          outTime: outT,
+          hours: hrs,
+          rate,
+          formula: 'Detention Charge applies only when stay > 60 minutes',
+          calc: isShort
+            ? 'Stay = ' + stayMins + ' min (< 60 min threshold) \u2014 detention does not apply'
+            : 'Detention Charge = $' + rate.toFixed(2) + '/hour \u00d7 ' + hrs + ' hours',
+        };
+      }
+      return {
+        ...baseCfg,
+        amount: chargeAmount,
+        remark: charge.remark || baseCfg.remark,
+      };
+    }
+    if (ct === 'toll') {
+      return { ...baseCfg, amount: chargeAmount, remark: charge.remark || baseCfg.remark };
+    }
+    return { ...baseCfg, amount: chargeAmount };
+  })();
+  const titleMap = { distance: 'Distance Based Cost', unloading: 'Unloading Charge', detention: 'Detention Charge', toll: 'Toll Charge' };
   const verifiedMap = {
     distance: 'Verified by Proof of Delivery (POD)',
     unloading: 'Verified by signed POD attachment',
     detention: 'Verified by intime/outtime from GPS',
+    toll: 'Verified by Linkt e-tag trip statement',
   };
 
   return (
@@ -26,7 +99,11 @@ function ChargeModal({ open, onClose, charge, trip }) {
         <div className="modal-head">
           <span className="x-btn" onClick={onClose}>{Icon.x(16)}</span>
           <h2>{titleMap[ct]}</h2>
-          <div className="verified">{Icon.check(13)} {verifiedMap[ct]}</div>
+          {charge.aiBucket === 'reject'
+            ? <div className="verified" style={{background:'#FFE5E5', color:'#C53030', borderColor:'#F5B5B7'}}>{Icon.x(13)} AI suggests reject — {charge.aiPill || verifiedMap[ct]}</div>
+            : charge.aiBucket === 'review'
+            ? <div className="verified" style={{background:'#FFF3D9', color:'#8A5A00', borderColor:'#F5C97B'}}>! Needs review — {charge.aiPill || verifiedMap[ct]}</div>
+            : <div className="verified">{Icon.check(13)} {verifiedMap[ct]}</div>}
         </div>
         <div className="modal-tabs">
           <div className={'modal-tab ' + (tab==='docs'?'active':'')} onClick={()=>setTab('docs')}>Documents</div>
@@ -89,6 +166,14 @@ function ChargeModal({ open, onClose, charge, trip }) {
                       <tr><td>Out Time</td><td style={{fontWeight:600}}>{cfg.outTime}</td><td className="right"><span className="src-pill">from GPS {Icon.pin(10)}</span></td></tr>
                     </>
                   )}
+                  {ct === 'toll' && (
+                    <>
+                      <tr><td>e-Tag Number</td><td style={{fontWeight:600}}>{cfg.tagNumber}</td><td className="right"><span className="src-pill">from Linkt {Icon.pin(10)}</span></td></tr>
+                      <tr><td>Vehicle Class</td><td style={{fontWeight:600}}>{cfg.vehicleClass}</td><td className="right"><span className="src-pill">from Rate Masters</span></td></tr>
+                      <tr><td>Account</td><td style={{fontWeight:600, fontSize:11.5}}>{cfg.account}</td><td className="right"><span className="src-pill">from Linkt {Icon.pin(10)}</span></td></tr>
+                      <tr><td>Toll Crossings</td><td style={{fontWeight:600}}>{cfg.trips}</td><td className="right"><span className="src-pill">GPS-matched</span></td></tr>
+                    </>
+                  )}
                 </tbody>
               </table>
               <div className="section-title" style={{marginTop:18}}>
@@ -107,6 +192,7 @@ function ChargeModal({ open, onClose, charge, trip }) {
 
 // Australian Coates Hire delivery docket — actual photographed POD image
 function PodAttachment({ chargeType, trip }) {
+  if (chargeType === 'toll') return <LinktTollStatement trip={trip} />;
   const isUnload = chargeType === 'unloading';
   const src = isUnload ? 'pod-unloading-final.png' : 'pod-distance-final.png';
   return (
@@ -119,6 +205,134 @@ function PodAttachment({ chargeType, trip }) {
         marginTop:8,
       }}>
         <img src={src} alt="Delivery Docket" style={{width:'100%', display:'block'}} />
+      </div>
+    </div>
+  );
+}
+
+// Linkt Trip Statement (Australian e-tag toll receipt) — for toll charge POD
+function LinktTollStatement({ trip }) {
+  const tolls = [
+    { date: '15 Feb 2026', time: '06:42am', point: 'Hexham Bridge (M1 Pacific Mwy)', direction: 'Northbound', amount: 14.83 },
+    { date: '15 Feb 2026', time: '06:51am', point: 'Beresfield (M1 Pacific Mwy)', direction: 'Northbound', amount: 12.40 },
+    { date: '15 Feb 2026', time: '07:08am', point: 'Buchanan (Hunter Expressway)', direction: 'Westbound', amount: 18.65 },
+    { date: '15 Feb 2026', time: '07:22am', point: 'Kurri Kurri (Hunter Expressway)', direction: 'Westbound', amount: 9.20 },
+    { date: '16 Feb 2026', time: '03:11pm', point: 'Kurri Kurri (Hunter Expressway)', direction: 'Eastbound', amount: 9.20 },
+    { date: '16 Feb 2026', time: '03:28pm', point: 'Beresfield (M1 Pacific Mwy)', direction: 'Southbound', amount: 12.40 },
+    { date: '16 Feb 2026', time: '03:36pm', point: 'Hexham Bridge (M1 Pacific Mwy)', direction: 'Southbound', amount: 14.83 },
+  ];
+  const subtotal = tolls.reduce((s, t) => s + t.amount, 0);
+  const hvSurcharge = 208.49; // Heavy vehicle multiplier brings it to $300 total
+  const total = subtotal + hvSurcharge;
+  return (
+    <div style={{width:'100%', height:'100%', overflow:'auto', background:'#E8EBF0', display:'flex', justifyContent:'center', alignItems:'flex-start', padding:18, boxSizing:'border-box'}}>
+      <div style={{width:'100%', maxWidth:400, background:'#fff', boxShadow:'0 2px 14px rgba(0,0,0,0.18)', padding:'18px 20px', fontFamily:'-apple-system, BlinkMacSystemFont, sans-serif', color:'#1F2533'}}>
+        {/* Linkt header */}
+        <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', borderBottom:'2px solid #003E7E', paddingBottom:10, marginBottom:12}}>
+          <div>
+            <div style={{display:'flex', alignItems:'center', gap:6}}>
+              <div style={{width:22, height:22, background:'#003E7E', color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:800, fontSize:13, borderRadius:3}}>L</div>
+              <div style={{fontSize:15, fontWeight:800, color:'#003E7E', letterSpacing:0.3}}>Linkt</div>
+            </div>
+            <div style={{fontSize:7, color:'#6B7388', marginTop:3}}>Transurban Limited · ABN 96 098 143 410</div>
+          </div>
+          <div style={{textAlign:'right'}}>
+            <div style={{fontSize:10, fontWeight:700}}>TRIP STATEMENT</div>
+            <div style={{fontSize:7, color:'#6B7388', marginTop:2}}>Statement #LK-204881-26</div>
+            <div style={{fontSize:7, color:'#6B7388'}}>Issued 17 Feb 2026</div>
+          </div>
+        </div>
+
+        {/* Account info */}
+        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, fontSize:7.5, marginBottom:12}}>
+          <div>
+            <div style={{fontWeight:700, fontSize:8, marginBottom:2, color:'#1F2533', textTransform:'uppercase', letterSpacing:0.5}}>Account Holder</div>
+            <div style={{fontWeight:500}}>Dickies Transport Pty Ltd</div>
+            <div style={{color:'#6B7388'}}>Fleet · Linkt Business</div>
+            <div style={{color:'#6B7388', marginTop:1}}>A/C 88-0411-2967</div>
+          </div>
+          <div>
+            <div style={{fontWeight:700, fontSize:8, marginBottom:2, color:'#1F2533', textTransform:'uppercase', letterSpacing:0.5}}>Vehicle</div>
+            <div style={{fontWeight:500}}>Kenworth K200</div>
+            <div style={{color:'#6B7388'}}>Rego: NSW DT-1142K</div>
+            <div style={{color:'#6B7388', marginTop:1}}>Class HV4 · 4+ axles</div>
+          </div>
+        </div>
+
+        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8, fontSize:7.5, marginBottom:12, paddingTop:8, borderTop:'1px dashed #DDE1EA'}}>
+          <div>
+            <div style={{fontWeight:700, fontSize:8}}>Trip Reference</div>
+            <div style={{marginTop:2, color:'#003E7E'}}>{trip}</div>
+          </div>
+          <div>
+            <div style={{fontWeight:700, fontSize:8}}>e-Tag Number</div>
+            <div style={{marginTop:2, fontVariantNumeric:'tabular-nums'}}>4118-0099-2814</div>
+          </div>
+          <div>
+            <div style={{fontWeight:700, fontSize:8}}>Period</div>
+            <div style={{marginTop:2}}>15–16 Feb 2026</div>
+          </div>
+        </div>
+
+        {/* Toll detail table */}
+        <div style={{fontSize:8, fontWeight:700, marginBottom:4, color:'#1F2533'}}>Toll Point Crossings</div>
+        <table style={{width:'100%', fontSize:7, borderCollapse:'collapse'}}>
+          <thead>
+            <tr style={{background:'#003E7E', color:'#fff'}}>
+              <th style={{textAlign:'left', padding:'4px 5px'}}>Date / Time</th>
+              <th style={{textAlign:'left', padding:'4px 5px'}}>Toll Point</th>
+              <th style={{textAlign:'left', padding:'4px 5px', width:55}}>Dir.</th>
+              <th style={{textAlign:'right', padding:'4px 5px', width:48}}>Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {tolls.map((t, i) => (
+              <tr key={i} style={{borderBottom:'1px solid #EEF0F4'}}>
+                <td style={{padding:'4px 5px', whiteSpace:'nowrap'}}>{t.date.slice(0,6)}<br/><span style={{color:'#6B7388'}}>{t.time}</span></td>
+                <td style={{padding:'4px 5px'}}>{t.point}</td>
+                <td style={{padding:'4px 5px', color:'#6B7388'}}>{t.direction}</td>
+                <td style={{textAlign:'right', padding:'4px 5px', fontVariantNumeric:'tabular-nums', fontWeight:500}}>${t.amount.toFixed(2)}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colSpan={3} style={{textAlign:'right', padding:'5px', fontSize:7, color:'#6B7388'}}>Subtotal (7 crossings)</td>
+              <td style={{textAlign:'right', padding:'5px', fontVariantNumeric:'tabular-nums'}}>${subtotal.toFixed(2)}</td>
+            </tr>
+            <tr>
+              <td colSpan={3} style={{textAlign:'right', padding:'5px', fontSize:7, color:'#6B7388'}}>Heavy Vehicle multiplier (HV4)</td>
+              <td style={{textAlign:'right', padding:'5px', fontVariantNumeric:'tabular-nums'}}>${hvSurcharge.toFixed(2)}</td>
+            </tr>
+            <tr style={{background:'#F2F5FA', borderTop:'2px solid #003E7E'}}>
+              <td colSpan={3} style={{textAlign:'right', padding:'6px 5px', fontWeight:700, fontSize:8}}>TOTAL (incl. GST)</td>
+              <td style={{textAlign:'right', padding:'6px 5px', fontVariantNumeric:'tabular-nums', fontWeight:800, fontSize:9}}>${total.toFixed(2)}</td>
+            </tr>
+          </tfoot>
+        </table>
+
+        {/* Bottom note */}
+        <div style={{marginTop:12, padding:'8px 10px', background:'#EEF1FF', border:'1px solid #C9D2FF', borderRadius:4, fontSize:7}}>
+          <div style={{fontWeight:700, color:'#003E7E', marginBottom:2}}>e-Tag Verified</div>
+          <div style={{color:'#3A4790'}}>All 7 crossings detected by tag <b>4118-0099-2814</b> on vehicle <b>NSW DT-1142K</b>. Route matched to trip GPS log within ±60 sec.</div>
+        </div>
+
+        <div style={{marginTop:10, paddingTop:8, borderTop:'1px dashed #C7CDDB', fontSize:6.5, color:'#8A92A6', display:'flex', justifyContent:'space-between'}}>
+          <div>linkt.com.au · 13 33 31</div>
+          <div>Page 1 of 1</div>
+        </div>
+
+        {/* Linkt verified stamp */}
+        <div style={{marginTop:10, display:'flex', justifyContent:'flex-end'}}>
+          <div style={{
+            transform:'rotate(-6deg)',
+            border:'2.5px solid #003E7E', color:'#003E7E',
+            padding:'4px 11px', fontSize:9, fontWeight:800, letterSpacing:1.5, borderRadius:3,
+            fontFamily:'Georgia, serif'
+          }}>
+            e-TAG VERIFIED ✓
+          </div>
+        </div>
       </div>
     </div>
   );

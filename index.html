@@ -4,6 +4,9 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Settlements — Australian Transport Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Kalam:wght@400;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="app.css" />
 </head>
 <body>
@@ -31,6 +34,25 @@ function App() {
   const [screen, setScreen] = React.useState('charges'); // start on Review Charges
   const [selectedTrip, setSelectedTrip] = React.useState(null);
   const [modal, setModal] = React.useState(null);
+  const [tripStatus, setTripStatus] = React.useState({}); // {tripId: 'approved'|'rejected'}
+  const [toast, setToast] = React.useState(null);
+
+  const showToast = React.useCallback((msg) => {
+    setToast(msg);
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(() => setToast(null), 2200);
+  }, []);
+
+  const setStatus = React.useCallback((ids, status) => {
+    if (!ids.length) return;
+    setTripStatus(prev => {
+      const next = {...prev};
+      ids.forEach(id => { next[id] = status; });
+      return next;
+    });
+    const verb = status === 'approved' ? 'Approved' : 'Rejected';
+    showToast(verb + ' ' + ids.length + ' trip' + (ids.length>1?'s':''));
+  }, [showToast]);
 
   const Nav = () => (
     <div style={{
@@ -50,6 +72,8 @@ function App() {
         <ChargesScreen
           go={setScreen}
           onSelectTrip={(t) => { setSelectedTrip(t); setScreen('breakup'); }}
+          tripStatus={tripStatus}
+          setStatus={setStatus}
         />
       )}
       {screen==='breakup' && (
@@ -57,9 +81,16 @@ function App() {
           trip={selectedTrip}
           onBack={() => setScreen('charges')}
           onSelectCharge={(c, t) => setModal({ charge: c, trip: t })}
+          onApprove={() => { setStatus([selectedTrip.id], 'approved'); setScreen('charges'); }}
+          onReject={() => { setStatus([selectedTrip.id], 'rejected'); setScreen('charges'); }}
         />
       )}
       {modal && <ChargeModal open={true} onClose={() => setModal(null)} charge={modal.charge} trip={modal.trip} />}
+      {toast && (
+        <div style={{position:'fixed', bottom:80, left:'50%', transform:'translateX(-50%)', background:'#1F2533', color:'#fff', padding:'10px 18px', borderRadius:6, fontSize:13, fontWeight:500, boxShadow:'0 4px 16px rgba(0,0,0,0.25)', zIndex:10000}}>
+          ✓ {toast}
+        </div>
+      )}
       <Nav />
     </>
   );

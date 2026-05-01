@@ -1,15 +1,65 @@
 // Review Charges — main listing screen (replaces Review PODs as homepage)
-function ChargesScreen({ go, onSelectTrip }) {
+function ChargesScreen({ go, onSelectTrip, tripStatus = {}, setStatus }) {
   const [tab, setTab] = React.useState('open');
   const [groupBy, setGroupBy] = React.useState('ai');
   const [expanded, setExpanded] = React.useState({approve:true, review:true, reject:true});
+  const [selected, setSelected] = React.useState({}); // {tripId: true}
+
+  const statusOf = (id) => tripStatus[id] || 'open';
+  const visibleTrips = window.TRIPS.filter(t => {
+    const s = statusOf(t.id);
+    if (tab === 'open') return s === 'open';
+    if (tab === 'approved') return s === 'approved';
+    if (tab === 'rejected') return s === 'rejected';
+    return true;
+  });
 
   const groups = ['approve', 'review', 'reject'].map(b => ({
     bucket: b,
-    items: TRIPS.filter(t => t.aiBucket === b),
+    items: visibleTrips.filter(t => t.aiBucket === b),
   }));
 
-  const tabCounts = { open: 397, approved: 500, rejected: 56 };
+  const applyStatus = (ids, newStatus) => {
+    if (!ids.length || !setStatus) return;
+    setStatus(ids, newStatus);
+    setSelected(prev => {
+      const next = {...prev};
+      ids.forEach(id => { delete next[id]; });
+      return next;
+    });
+  };
+
+  const bulkApprove = () => applyStatus(Object.keys(selected), 'approved');
+  const bulkReject = () => applyStatus(Object.keys(selected), 'rejected');
+  const rowApprove = (id) => applyStatus([id], 'approved');
+  const rowReject = (id) => applyStatus([id], 'rejected');
+
+  const toggleBucket = (bucket) => {
+    const items = visibleTrips.filter(t => t.aiBucket === bucket);
+    const allSelected = items.length > 0 && items.every(it => selected[it.id]);
+    const next = {...selected};
+    items.forEach(it => { if (allSelected) delete next[it.id]; else next[it.id] = true; });
+    setSelected(next);
+  };
+  const toggleRow = (id) => setSelected(s => { const n = {...s}; if (n[id]) delete n[id]; else n[id] = true; return n; });
+  const isBucketAllSelected = (bucket) => {
+    const items = visibleTrips.filter(t => t.aiBucket === bucket);
+    return items.length > 0 && items.every(it => selected[it.id]);
+  };
+  const isBucketSomeSelected = (bucket) => {
+    const items = visibleTrips.filter(t => t.aiBucket === bucket);
+    return items.some(it => selected[it.id]) && !isBucketAllSelected(bucket);
+  };
+  const totalSelected = Object.keys(selected).length;
+
+  // Baseline historical counts (past activity) + what gets actioned in this session
+  const sessionApproved = window.TRIPS.filter(t => statusOf(t.id) === 'approved').length;
+  const sessionRejected = window.TRIPS.filter(t => statusOf(t.id) === 'rejected').length;
+  const tabCounts = {
+    open: window.TRIPS.filter(t => statusOf(t.id) === 'open').length,
+    approved: 500 + sessionApproved,
+    rejected: 56 + sessionRejected,
+  };
 
   return (
     <div className="app">
@@ -48,8 +98,8 @@ function ChargesScreen({ go, onSelectTrip }) {
             <span style={{color:'#4F65FF', fontSize:12, fontWeight:500, cursor:'pointer'}}>More Filters</span>
             <div style={{flex:1}} />
             <div className="icon-button">{Icon.download()}</div>
-            <button className="btn btn-approve">{Icon.check(13)} Approve</button>
-            <button className="btn btn-reject">{Icon.x(13)} Reject</button>
+            <button className="btn btn-approve" onClick={bulkApprove} disabled={!totalSelected} style={{opacity: totalSelected?1:0.5, cursor: totalSelected?'pointer':'not-allowed'}}>{Icon.check(13)} Approve{totalSelected > 0 ? ' (' + totalSelected + ')' : ''}</button>
+            <button className="btn btn-reject" onClick={bulkReject} disabled={!totalSelected} style={{opacity: totalSelected?1:0.5, cursor: totalSelected?'pointer':'not-allowed'}}>{Icon.x(13)} Reject{totalSelected > 0 ? ' (' + totalSelected + ')' : ''}</button>
             <div className="pager" style={{marginLeft:8}}>
               <button>K</button>
               <button>{Icon.chevLeft(12)}</button>
@@ -79,9 +129,12 @@ function ChargesScreen({ go, onSelectTrip }) {
                     <td colSpan={8}>
                       <span style={{display:'inline-flex', alignItems:'center', gap:8}}>
                         <span style={{cursor:'pointer'}} onClick={()=>setExpanded({...expanded, [g.bucket]: !expanded[g.bucket]})}>{expanded[g.bucket] ? Icon.chevDown(12) : Icon.chevRight(12)}</span>
-                        <input type="checkbox"/>
+                        <input type="checkbox" checked={isBucketAllSelected(g.bucket)} ref={el => { if (el) el.indeterminate = isBucketSomeSelected(g.bucket); }} onChange={()=>toggleBucket(g.bucket)} title="Select all in this bucket"/>
                         <span className={'bucket-pill ' + g.bucket}>
                           {Icon.sparkle(10)} AI Suggest: {g.bucket.charAt(0).toUpperCase()+g.bucket.slice(1)}
+                        </span>
+                        <span style={{fontSize:11, color:'#6B7388', marginLeft:6}}>
+                          {g.items.filter(it => selected[it.id]).length > 0 ? g.items.filter(it => selected[it.id]).length + ' of ' + g.items.length + ' selected' : g.items.length + ' trips'}
                         </span>
                       </span>
                     </td>
@@ -89,7 +142,7 @@ function ChargesScreen({ go, onSelectTrip }) {
                   {expanded[g.bucket] && g.items.map(it => (
                     <tr key={it.id} className="pod-row">
                       <td></td>
-                      <td><input type="checkbox"/></td>
+                      <td><input type="checkbox" checked={!!selected[it.id]} onChange={()=>toggleRow(it.id)}/></td>
                       <td>
                         <div className="cn-link" style={{cursor:'pointer', fontWeight:500}} onClick={() => onSelectTrip && onSelectTrip(it)}>
                           {it.id} / {it.vendor}
@@ -110,8 +163,8 @@ function ChargesScreen({ go, onSelectTrip }) {
                       </td>
                       <td className="center">
                         <span className="row-actions">
-                          <span className="iact approve">{Icon.check(13)}</span>
-                          <span className="iact reject">{Icon.x(13)}</span>
+                          <span className="iact approve" onClick={(e)=>{e.stopPropagation(); rowApprove(it.id);}} title="Approve">{Icon.check(13)}</span>
+                          <span className="iact reject" onClick={(e)=>{e.stopPropagation(); rowReject(it.id);}} title="Reject">{Icon.x(13)}</span>
                           <span className="iact view" onClick={() => onSelectTrip && onSelectTrip(it)} title="View charge breakup">{Icon.plus ? Icon.plus(13) : '+'}</span>
                         </span>
                       </td>
@@ -121,6 +174,11 @@ function ChargesScreen({ go, onSelectTrip }) {
               ))}
             </tbody>
           </table>
+          {visibleTrips.length === 0 && (
+            <div style={{padding:'48px 24px', textAlign:'center', color:'#8A92A6', fontSize:13}}>
+              No {tab} trips. {tab !== 'open' ? 'Approve or reject trips from the Open tab to populate this view.' : 'All clear!'}
+            </div>
+          )}
         </div>
       </div>
     </div>
