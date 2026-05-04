@@ -5,7 +5,7 @@ function ChargeModal({ open, onClose, charge, trip }) {
   if (!open || !charge) return null;
 
   const ct = charge.chargeType || 'detention';
-  const isTelemetry = ct === 'detention';
+  const isTelemetry = ct === 'detention' || ct === 'penalty';
   const tripId = (trip && trip.id) || charge.entity;
 
   React.useEffect(() => {
@@ -13,7 +13,7 @@ function ChargeModal({ open, onClose, charge, trip }) {
   }, [ct, isTelemetry]);
 
   // Build a per-charge cfg from the actual clicked charge so amount/distance/etc. reflect THIS trip
-  const baseCfg = ct === 'distance' ? DISTANCE : ct === 'unloading' ? UNLOADING : ct === 'toll' ? TOLL : DETENTION;
+  const baseCfg = ct === 'distance' ? DISTANCE : ct === 'unloading' ? UNLOADING : ct === 'toll' ? TOLL : ct === 'penalty' ? DETENTION : DETENTION;
   const chargeAmount = Math.abs(charge.amount || baseCfg.amount);
   const cfg = (() => {
     if (ct === 'distance') {
@@ -83,14 +83,38 @@ function ChargeModal({ open, onClose, charge, trip }) {
     if (ct === 'toll') {
       return { ...baseCfg, amount: chargeAmount, remark: charge.remark || baseCfg.remark };
     }
+    if (ct === 'penalty') {
+      // Pull "X min" or "X hr/hrs" out of the AI pill to compute the delay
+      const pill = (charge.aiPill || '').toLowerCase();
+      let lateMins = 90;
+      const minMatch = pill.match(/(\d+)\s*min/);
+      const hrMatch = pill.match(/(\d+(?:\.\d+)?)\s*hr/);
+      if (minMatch) lateMins = parseInt(minMatch[1], 10);
+      else if (hrMatch) lateMins = Math.round(parseFloat(hrMatch[1]) * 60);
+      const lateHrs = (lateMins / 60).toFixed(2);
+      const ratePerHr = 50;
+      return {
+        ...baseCfg,
+        amount: chargeAmount,
+        remark: charge.remark || 'SLA breach',
+        committedEta: '16 Feb 2026 12:00pm',
+        actualArrival: '16 Feb 2026 ' + (lateMins >= 90 ? '1:30pm' : '12:' + String(lateMins).padStart(2,'0') + 'pm'),
+        lateMins,
+        lateHrs,
+        ratePerHr,
+        formula: 'Delay Penalty = SLA penalty rate \u00d7 hours late (capped per agreement)',
+        calc: 'Delay Penalty = $' + ratePerHr.toFixed(2) + '/hr \u00d7 ' + lateHrs + ' hrs late',
+      };
+    }
     return { ...baseCfg, amount: chargeAmount };
   })();
-  const titleMap = { distance: 'Distance Based Cost', unloading: 'Unloading Charge', detention: 'Detention Charge', toll: 'Toll Charge' };
+  const titleMap = { distance: 'Distance Based Cost', unloading: 'Unloading Charge', detention: 'Detention Charge', toll: 'Toll Charge', penalty: 'Delay Penalty' };
   const verifiedMap = {
     distance: 'Verified by Proof of Delivery (POD)',
     unloading: 'Verified by signed POD attachment',
     detention: 'Verified by intime/outtime from GPS',
     toll: 'Verified by Linkt e-tag trip statement',
+    penalty: 'Applied for SLA breach (verified by GPS arrival time)',
   };
 
   return (
@@ -117,7 +141,7 @@ function ChargeModal({ open, onClose, charge, trip }) {
                 <div className={'sub-tab ' + (subTab==='attach'?'active':'')} onClick={()=>setSubTab('attach')}>Charge Attachment</div>
               </div>
               <div className="map-frame">
-                {subTab === 'map' ? <MapMock /> : <PodAttachment chargeType={ct} trip={tripId} />}
+                {subTab === 'map' ? <MapMock /> : <PodAttachment chargeType={ct} trip={tripId} carrier={trip && trip.vendor} />}
               </div>
             </div>
             <div className="modal-right">
@@ -174,6 +198,14 @@ function ChargeModal({ open, onClose, charge, trip }) {
                       <tr><td>Toll Crossings</td><td style={{fontWeight:600}}>{cfg.trips}</td><td className="right"><span className="src-pill">GPS-matched</span></td></tr>
                     </>
                   )}
+                  {ct === 'penalty' && (
+                    <>
+                      <tr><td>Committed ETA</td><td style={{fontWeight:600}}>{cfg.committedEta}</td><td className="right"><span className="src-pill">from SLA agreement</span></td></tr>
+                      <tr><td>Actual Arrival</td><td style={{fontWeight:600}}>{cfg.actualArrival}</td><td className="right"><span className="src-pill">from GPS {Icon.pin(10)}</span></td></tr>
+                      <tr><td>Delay</td><td style={{fontWeight:600}}>{cfg.lateHrs} hrs ({cfg.lateMins} min)</td><td className="right"><span className="src-pill">computed</span></td></tr>
+                      <tr><td>Penalty Rate</td><td style={{fontWeight:600}}>${cfg.ratePerHr.toFixed(2)}/hr</td><td className="right"><span className="src-pill">from Rate Masters</span></td></tr>
+                    </>
+                  )}
                 </tbody>
               </table>
               <div className="section-title" style={{marginTop:18}}>
@@ -190,24 +222,12 @@ function ChargeModal({ open, onClose, charge, trip }) {
   );
 }
 
-// Australian Coates Hire delivery docket — actual photographed POD image
-function PodAttachment({ chargeType, trip }) {
+// Delivery docket — header carrier name comes from the line item's vendor.
+function PodAttachment({ chargeType, trip, carrier }) {
   if (chargeType === 'toll') return <LinktTollStatement trip={trip} />;
-  const isUnload = chargeType === 'unloading';
-  const src = isUnload ? 'pod-unloading-final.png' : 'pod-distance-final.png';
-  return (
-    <div style={{width:'100%', height:'100%', overflow:'auto', background:'#2a2620', display:'flex', justifyContent:'center', alignItems:'flex-start', padding:24, boxSizing:'border-box'}}>
-      <div style={{
-        position:'relative',
-        width:'100%', maxWidth:380,
-        boxShadow:'0 18px 40px rgba(0,0,0,0.55), 0 4px 12px rgba(0,0,0,0.35)',
-        transform:'rotate(-0.8deg)',
-        marginTop:8,
-      }}>
-        <img src={src} alt="Delivery Docket" style={{width:'100%', display:'block'}} />
-      </div>
-    </div>
-  );
+  if (chargeType === 'penalty') return <DelayPenaltyLog trip={trip} carrier={carrier} />;
+  const variant = chargeType === 'unloading' ? 'unloading' : chargeType === 'detention' ? 'detention' : 'distance';
+  return <PodDocket variant={variant} trip={trip} carrier={carrier} />;
 }
 
 // Linkt Trip Statement (Australian e-tag toll receipt) — for toll charge POD
@@ -331,6 +351,129 @@ function LinktTollStatement({ trip }) {
             fontFamily:'Georgia, serif'
           }}>
             e-TAG VERIFIED ✓
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// SLA Breach / Delay Penalty evidence — a system-generated late-arrival report
+function DelayPenaltyLog({ trip, carrier }) {
+  const carrierName = (carrier || 'Carrier').toUpperCase();
+  const events = [
+    { t: '06:42am', label: 'Trip dispatched · Carrington Wharf', status: 'on-time' },
+    { t: '08:15am', label: 'Loading complete · departed origin', status: 'on-time' },
+    { t: '11:48am', label: 'Geofence enter · 5km from delivery', status: 'on-time' },
+    { t: '12:00pm', label: 'COMMITTED ETA (per SLA)', status: 'sla' },
+    { t: '12:38pm', label: 'GPS ping · stationary at Beresfield (off-route)', status: 'late' },
+    { t: '01:12pm', label: 'Re-routed · resumed travel', status: 'late' },
+    { t: '01:30pm', label: 'Geofence enter · destination · ARRIVED', status: 'arrived' },
+  ];
+  return (
+    <div style={{width:'100%', height:'100%', overflow:'auto', background:'#E8EBF0', display:'flex', justifyContent:'center', alignItems:'flex-start', padding:18, boxSizing:'border-box'}}>
+      <div style={{width:'100%', maxWidth:400, background:'#fff', boxShadow:'0 2px 14px rgba(0,0,0,0.18)', padding:'18px 20px', fontFamily:'-apple-system, BlinkMacSystemFont, sans-serif', color:'#1F2533'}}>
+        {/* Header */}
+        <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', borderBottom:'2px solid #B7281D', paddingBottom:10, marginBottom:12}}>
+          <div>
+            <div style={{display:'flex', alignItems:'center', gap:6}}>
+              <div style={{width:22, height:22, background:'#B7281D', color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:800, fontSize:13, borderRadius:3}}>!</div>
+              <div style={{fontSize:13, fontWeight:800, color:'#B7281D', letterSpacing:0.3}}>SLA BREACH REPORT</div>
+            </div>
+            <div style={{fontSize:7, color:'#6B7388', marginTop:3}}>Auto-generated · Shipsy TMS · GPS-verified</div>
+          </div>
+          <div style={{textAlign:'right'}}>
+            <div style={{fontSize:9, fontWeight:700}}>Late Delivery</div>
+            <div style={{fontSize:7, color:'#6B7388', marginTop:2}}>Report #SB-{(trip||'').replace(/[^0-9]/g,'').slice(-5) || '20488'}</div>
+            <div style={{fontSize:7, color:'#6B7388'}}>Generated 16 Feb 2026 1:31pm</div>
+          </div>
+        </div>
+
+        {/* Trip + Carrier info */}
+        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, fontSize:7.5, marginBottom:12}}>
+          <div>
+            <div style={{fontWeight:700, fontSize:8, marginBottom:2, textTransform:'uppercase', letterSpacing:0.5}}>Trip</div>
+            <div style={{fontWeight:600, color:'#003E7E'}}>{trip}</div>
+            <div style={{color:'#6B7388'}}>Carrington → Maitland DC</div>
+          </div>
+          <div>
+            <div style={{fontWeight:700, fontSize:8, marginBottom:2, textTransform:'uppercase', letterSpacing:0.5}}>Carrier</div>
+            <div style={{fontWeight:600}}>{carrierName}</div>
+            <div style={{color:'#6B7388'}}>SLA: 4-hr window · ETA-strict</div>
+          </div>
+        </div>
+
+        {/* Breach summary */}
+        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:6, marginBottom:14, padding:'8px 10px', background:'#FFF3F2', border:'1px solid #F5C5BF', borderRadius:4}}>
+          <div>
+            <div style={{fontSize:6.5, color:'#8A2818', textTransform:'uppercase', letterSpacing:0.5, fontWeight:700}}>Committed ETA</div>
+            <div style={{fontSize:10, fontWeight:700, marginTop:2}}>12:00 pm</div>
+          </div>
+          <div>
+            <div style={{fontSize:6.5, color:'#8A2818', textTransform:'uppercase', letterSpacing:0.5, fontWeight:700}}>Actual Arrival</div>
+            <div style={{fontSize:10, fontWeight:700, marginTop:2, color:'#B7281D'}}>1:30 pm</div>
+          </div>
+          <div>
+            <div style={{fontSize:6.5, color:'#8A2818', textTransform:'uppercase', letterSpacing:0.5, fontWeight:700}}>Delay</div>
+            <div style={{fontSize:10, fontWeight:800, marginTop:2, color:'#B7281D'}}>+1h 30m</div>
+          </div>
+        </div>
+
+        {/* Event timeline */}
+        <div style={{fontSize:8, fontWeight:700, marginBottom:6, color:'#1F2533'}}>GPS Event Log</div>
+        <div style={{position:'relative', paddingLeft:16, marginBottom:14}}>
+          <div style={{position:'absolute', left:5, top:6, bottom:6, width:1.5, background:'#DDE1EA'}}></div>
+          {events.map((e, i) => {
+            const dot = e.status === 'sla' ? '#003E7E' : e.status === 'late' ? '#B7281D' : e.status === 'arrived' ? '#B7281D' : '#34A853';
+            const fontW = e.status === 'sla' || e.status === 'arrived' ? 700 : 500;
+            return (
+              <div key={i} style={{display:'flex', gap:8, marginBottom:6, fontSize:7.5, position:'relative'}}>
+                <div style={{position:'absolute', left:-16, top:3, width:9, height:9, borderRadius:'50%', background:dot, border:'2px solid #fff', boxShadow:'0 0 0 1px '+dot}}></div>
+                <div style={{width:46, color:'#6B7388', fontVariantNumeric:'tabular-nums', flexShrink:0}}>{e.t}</div>
+                <div style={{fontWeight:fontW, color: e.status==='sla' ? '#003E7E' : e.status==='late'||e.status==='arrived' ? '#B7281D' : '#1F2533'}}>{e.label}</div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* SLA clause */}
+        <div style={{padding:'8px 10px', background:'#F4F6FA', border:'1px solid #DDE1EA', borderRadius:4, marginBottom:10}}>
+          <div style={{fontSize:7, fontWeight:700, color:'#1F2533', marginBottom:2, textTransform:'uppercase', letterSpacing:0.5}}>Master Service Agreement · Clause 7.3(b)</div>
+          <div style={{fontSize:7, color:'#3A4255', lineHeight:1.45}}>"Where Carrier exceeds the Committed ETA by more than thirty (30) minutes without prior notice, a Delay Penalty of <b>$50.00 per hour</b> (or part thereof) shall apply, calculated to the nearest 0.25 hour."</div>
+        </div>
+
+        {/* Penalty calc */}
+        <table style={{width:'100%', fontSize:7.5, borderCollapse:'collapse'}}>
+          <tbody>
+            <tr style={{borderBottom:'1px solid #EEF0F4'}}>
+              <td style={{padding:'5px 4px'}}>Hours late (rounded ↑ to 0.25)</td>
+              <td style={{textAlign:'right', padding:'5px 4px', fontVariantNumeric:'tabular-nums'}}>1.50 hrs</td>
+            </tr>
+            <tr style={{borderBottom:'1px solid #EEF0F4'}}>
+              <td style={{padding:'5px 4px'}}>Penalty rate</td>
+              <td style={{textAlign:'right', padding:'5px 4px', fontVariantNumeric:'tabular-nums'}}>$50.00 / hr</td>
+            </tr>
+            <tr style={{background:'#FFF3F2', borderTop:'2px solid #B7281D'}}>
+              <td style={{padding:'6px 4px', fontWeight:700, fontSize:8}}>DELAY PENALTY</td>
+              <td style={{textAlign:'right', padding:'6px 4px', fontVariantNumeric:'tabular-nums', fontWeight:800, fontSize:9, color:'#B7281D'}}>$75.00</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div style={{marginTop:10, paddingTop:8, borderTop:'1px dashed #C7CDDB', fontSize:6.5, color:'#8A92A6', display:'flex', justifyContent:'space-between'}}>
+          <div>GPS source: Teltonika FMB920 · ping rate 30s</div>
+          <div>Page 1 of 1</div>
+        </div>
+
+        {/* Verified stamp */}
+        <div style={{marginTop:10, display:'flex', justifyContent:'flex-end'}}>
+          <div style={{
+            transform:'rotate(-6deg)',
+            border:'2.5px solid #B7281D', color:'#B7281D',
+            padding:'4px 11px', fontSize:9, fontWeight:800, letterSpacing:1.5, borderRadius:3,
+            fontFamily:'Georgia, serif'
+          }}>
+            SLA BREACH ✓
           </div>
         </div>
       </div>

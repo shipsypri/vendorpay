@@ -78,7 +78,7 @@ window.TRIP_CHARGES = {
       ]},
       { name: 'Ad-Hoc Charges', subtotal: 0, items: [] },
       { name: 'Penalties', subtotal: -50, items: [
-        { id: 'P1', name: 'Delay Penalty', entity: 'DD25665601-LAMB', entityType: 'Trip', amount: -50, remark: 'SLA breach — 2 hr late at Broadmeadow', aiPill: 'GPS arrival 2 hrs past committed ETA', aiBucket: 'penalty', chargeType: 'detention', reviewed: false },
+        { id: 'P1', name: 'Delay Penalty', entity: 'DD25665601-LAMB', entityType: 'Trip', amount: -50, remark: 'SLA breach — 2 hr late at Broadmeadow', aiPill: 'GPS arrival 2 hrs past committed ETA', aiBucket: 'penalty', chargeType: 'penalty', reviewed: false },
       ]},
     ],
     total: 1050,
@@ -119,7 +119,7 @@ window.TRIP_CHARGES = {
         { id: 'C4', name: 'Detention Charge', entity: 'CN-305505', entityType: 'Consignment', amount: 100, remark: 'Vendor claim \u2014 stay too short', aiPill: 'GPS shows 47 min stay; detention applies only > 60 min \u2014 reject', aiBucket: 'reject', chargeType: 'detention', reviewed: false },
       ]},
       { name: 'Penalties', subtotal: -75, items: [
-        { id: 'P1', name: 'Delay Penalty', entity: 'DD25673055-PENR', entityType: 'Trip', amount: -75, remark: 'SLA breach \u2014 ETA missed by 90 min', aiPill: 'GPS arrival 90 min past committed ETA', aiBucket: 'penalty', chargeType: 'detention', reviewed: false },
+        { id: 'P1', name: 'Delay Penalty', entity: 'DD25673055-PENR', entityType: 'Trip', amount: -75, remark: 'SLA breach \u2014 ETA missed by 90 min', aiPill: 'GPS arrival 90 min past committed ETA', aiBucket: 'penalty', chargeType: 'penalty', reviewed: false },
       ]},
     ],
     total: 1600,
@@ -174,7 +174,7 @@ window.getTripCharges = function(trip) {
         { id: 'C4', name: 'Loading Assist', entity: trip.id, entityType: 'Trip', amount: adhoc, remark: 'Manual handling', aiPill: 'Photo verified on POD', aiBucket: trip.aiBucket==='reject' ? 'reject' : 'approve', chargeType: 'distance', reviewed: trip.aiBucket!=='reject' },
       ]},
       { name: 'Penalties', subtotal: penalty, items: penalty < 0 ? [
-        { id: 'P1', name: 'Delay', entity: trip.id, entityType: 'Trip', amount: penalty, remark: 'SLA breach', aiPill: 'SLA exceeded by 2 hrs (from GPS)', aiBucket: 'penalty', chargeType: 'detention', reviewed: false },
+        { id: 'P1', name: 'Delay', entity: trip.id, entityType: 'Trip', amount: penalty, remark: 'SLA breach', aiPill: 'SLA exceeded by 2 hrs (from GPS)', aiBucket: 'penalty', chargeType: 'penalty', reviewed: false },
       ] : [] },
     ],
     total: trip.amount,

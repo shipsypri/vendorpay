@@ -1,11 +1,17 @@
-// AU POD docket — clean typed Coates Hire-style delivery docket
-function PodDocket({ variant, trip }) {
+// AU POD docket — clean typed delivery docket. Carrier comes from line item.
+function PodDocket({ variant, trip, carrier }) {
   const isDistance = variant === 'distance';
   const isUnloading = variant === 'unloading';
   const isDetention = variant === 'detention';
 
   const fromPlace = 'Lambton, NSW 2299';
   const toPlace = isDistance ? 'Kooragang, NSW 2304' : isUnloading ? 'Kooragang Coal Terminal, NSW 2304' : 'Carrington Coal Terminal, NSW 2294';
+
+  // Carrier name drives the docket header — falls back if not provided
+  const carrierName = (carrier || 'Carrier').toString();
+  const carrierUpper = carrierName.toUpperCase();
+  // Clean ABN/legal subtitle so it doesn't read as a real branded company
+  const carrierSubtitle = 'Transport Operations';
 
   return (
     <div style={{
@@ -22,9 +28,9 @@ function PodDocket({ variant, trip }) {
         {/* Header */}
         <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', borderBottom:'2px solid #1F2533', paddingBottom:10, marginBottom:14}}>
           <div>
-            <div style={{fontSize:14, fontWeight:800, letterSpacing:0.5, color:'#E5484D'}}>COATES HIRE</div>
-            <div style={{fontSize:7, color:'#6B7388', marginTop:2}}>Operations Pty Ltd</div>
-            <div style={{fontSize:7, color:'#6B7388'}}>ABN 99 064 263 567</div>
+            <div style={{fontSize:14, fontWeight:800, letterSpacing:0.5, color:'#E5484D'}}>{carrierUpper}</div>
+            <div style={{fontSize:7, color:'#6B7388', marginTop:2}}>{carrierSubtitle}</div>
+            <div style={{fontSize:7, color:'#6B7388'}}>Pty Ltd</div>
           </div>
           <div style={{textAlign:'right'}}>
             <div style={{fontSize:10, fontWeight:700, color:'#1F2533'}}>DELIVERY DOCKET</div>
@@ -37,7 +43,7 @@ function PodDocket({ variant, trip }) {
         <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, fontSize:7.5, marginBottom:12}}>
           <div>
             <div style={{fontWeight:700, fontSize:8, marginBottom:2, color:'#1F2533', textTransform:'uppercase', letterSpacing:0.5}}>From</div>
-            <div style={{fontWeight:500}}>Coates Hire — Lambton Depot</div>
+            <div style={{fontWeight:500}}>Lambton Depot</div>
             <div style={{color:'#6B7388'}}>15 Howe St, Lambton NSW 2299</div>
             <div style={{color:'#6B7388', marginTop:1}}>{fromPlace}</div>
           </div>
@@ -56,7 +62,7 @@ function PodDocket({ variant, trip }) {
           </div>
           <div>
             <div style={{fontWeight:700, fontSize:8, color:'#1F2533'}}>Carrier</div>
-            <div style={{marginTop:2}}>Dickies Transport</div>
+            <div style={{marginTop:2}}>{carrierName}</div>
           </div>
           <div>
             <div style={{fontWeight:700, fontSize:8, color:'#1F2533'}}>Date</div>
